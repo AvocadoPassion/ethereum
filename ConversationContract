@@ -1,0 +1,240 @@
+using Nethereum.Contracts;
+using Nethereum.RPC.Eth.DTOs;
+using System.Numerics;
+using Nethereum.Hex.HexTypes;
+using Nethereum.Hex.HexConvertors.Extensions;
+using System.Collections;
+using Nethereum.JsonRpc.UnityClient;
+using UnityEngine;
+
+public class ConversationContract {
+
+    public static string ABI = @"[{
+        ""constant"": false,
+        ""inputs"": [],
+        ""name"": ""conversation"",
+        ""outputs"": [],
+        ""payable"": true,
+        ""stateMutability"": ""payable"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""user"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""organizer"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""name"": ""balanceOf"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""uint256""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": false,
+        ""inputs"": [],
+        ""name"": ""drinkOrder"",
+        ""outputs"": [],
+        ""payable"": true,
+        ""stateMutability"": ""payable"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""amount"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""uint256""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""barista"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""inputs"": [],
+        ""payable"": false,
+        ""stateMutability"": ""nonpayable"",
+        ""type"": ""constructor""
+    },
+    {
+        ""anonymous"": false,
+        ""inputs"": [
+            {
+                ""indexed"": true,
+                ""name"": ""from"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": true,
+                ""name"": ""to"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": false,
+                ""name"": ""amount"",
+                ""type"": ""uint256""
+            }
+        ],
+        ""name"": ""Transfer"",
+        ""type"": ""event""
+    },
+    {
+        ""anonymous"": false,
+        ""inputs"": [
+            {
+                ""indexed"": true,
+                ""name"": ""from"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": true,
+                ""name"": ""to"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": false,
+                ""name"": ""amount"",
+                ""type"": ""uint256""
+            }
+        ],
+        ""name"": ""Order"",
+        ""type"": ""event""}]";
+
+    private static string contractAddress = "0xeF358939fF589291d0C6FF54365e4F80E1F75397";
+    private Contract contract;
+
+    public ConversationContract () {
+        this.contract = new Contract (null, ABI, contractAddress);
+    }
+
+    public Nethereum.Contracts.Event TransferEvent() {
+        return contract.GetEvent ("Transfer");
+    }
+
+    public Nethereum.Contracts.Event OrderEvent() {
+        return contract.GetEvent ("Order");
+    }
+
+    public Function ConversationFunction () {
+        return contract.GetFunction ("conversation");
+    }
+
+    public Function DrinkOrderFunction () {
+        return contract.GetFunction ("drinkOrder");
+    }
+
+    public TransactionInput CreateConversationInput(string addressFrom, string addressTo, BigInteger value, HexBigInteger gas = null, 
+        HexBigInteger gasPrice = null, HexBigInteger valueAmount = null){
+        var function = ConversationFunction ();
+        return function.CreateTransactionInput (addressFrom, gas, gasPrice, valueAmount);
+    }
+
+    public NewFilterInput CreateTransferInput() {
+        var evt = TransferEvent ();
+        return evt.CreateFilterInput (Nethereum.RPC.Eth.DTOs.BlockParameter.CreateEarliest (), Nethereum.RPC.Eth.DTOs.BlockParameter.CreateLatest ());
+    }
+
+    public NewFilterInput CreateOrderInput() {
+        var evt = OrderEvent ();
+        return evt.CreateFilterInput (Nethereum.RPC.Eth.DTOs.BlockParameter.CreateEarliest (), Nethereum.RPC.Eth.DTOs.BlockParameter.CreateLatest ());
+    }
+
+    public TransactionInput CreateDrinkOrderInput(string addressFrom, string addressTo, 
+        BigInteger value, HexBigInteger gas = null, HexBigInteger gasPrice = null, HexBigInteger valueAmount = null){
+        var function = DrinkOrderFunction ();
+        return function.CreateTransactionInput (addressFrom, gas, gasPrice, valueAmount);
+    }
+
+    // We are going to use this IEnumerator to loop every 10 seconds and check the 
+    // transaction hash, to see if its mined in the blockchain
+    public IEnumerator CheckTransactionReceiptIsMined(
+        string url, string txHash, System.Action<bool> callback
+    ) {
+        var mined = false;
+        // we are going to set the tries to 999 for testing purposes
+        var tries = 999;
+        while (!mined) {
+            if (tries > 0) {
+                tries = tries - 1;
+            } else {
+                mined = true;
+                Debug.Log("Performing last try..");
+            }
+            Debug.Log("Checking receipt for: " + txHash);
+            var receiptRequest = new EthGetTransactionReceiptUnityRequest(url);
+            yield return receiptRequest.SendRequest(txHash);
+            if (receiptRequest.Exception == null) {
+                if (receiptRequest.Result != null && receiptRequest.Result.Logs.HasValues) {
+                    var txType = receiptRequest.Result.Logs[0]["type"].ToString();
+                    if (txType == "mined") {
+                        // if we have a transaction type == mined we return the callback
+                        // and exit the loop
+                        mined = true;
+                        callback(mined);
+                    }
+                }
+            } else {
+                // If we had an error doing the request
+                Debug.Log("Error checking receipt: " + receiptRequest.Exception.Message);
+            }
+            yield return new WaitForSeconds(10);
+        }
+    }
+}
+
+
+
+
+
