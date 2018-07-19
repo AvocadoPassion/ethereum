@@ -1,0 +1,39 @@
+pragma solidity ^0.4.21;
+
+contract ARConversation {
+    
+address public organizer;
+address public user; 
+address public barista;
+
+mapping (address => uint) public balanceOf;
+
+
+event Transfer(address indexed from, address indexed to, uint256 amount);
+event Order(address indexed from, address indexed to, uint256 amount);
+uint public amount;
+    
+constructor() public {
+    organizer = msg.sender;
+    amount = 2;
+    user = 0xd62D6608Bb035B618704f4a8c4fE74429a8F188f;
+    barista = 0xFBE095abE7b2dC445C852f22f1b6cCC7DBbe2aE5;
+}
+
+function conversation() public payable{
+    if (msg.sender != organizer) return;
+    balanceOf[user] += amount;
+    require(user.call.value(amount)());
+    emit Transfer(msg.sender, user, amount);
+}
+
+function drinkOrder() public payable {
+    if(balanceOf[user] < amount) return;
+        balanceOf[user]-=amount;
+        balanceOf[barista]+=amount;
+        require(user.call.value(amount)());
+        emit Order(user, barista, amount);
+}
+
+}
+
