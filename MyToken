@@ -1,0 +1,330 @@
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+using Nethereum.JsonRpc.UnityClient;
+using Nethereum.Hex.HexTypes;
+using Nethereum.Contracts;
+using System;
+using System.Numerics;
+
+public class MyToken : MonoBehaviour {
+
+    private string accountAddress;
+    private string accountPrivateKey = "4e86029829021e63da5e164207638a748040d70e32f53b679767bf0234100190";
+    private string _url = "HTTP://127.0.0.1:7545";
+    private DeployContractTransactionBuilder contractTransactionBuilder = new DeployContractTransactionBuilder();
+    private string userAddress = "0xd62D6608Bb035B618704f4a8c4fE74429a8F188f";
+    private string baristaAddress = "0xFBE095abE7b2dC445C852f22f1b6cCC7DBbe2aE5";
+    private ConversationContract conversationContract = new ConversationContract();
+
+    void Start () {
+        importAccountFromPrivateKey ();
+
+        //conversation ();
+        //checkTransferEvent ();
+        //checkOrderEvent ();
+        sendDrinkOrder ();
+
+
+    }
+
+    public void importAccountFromPrivateKey () {
+        try {
+            var address = Nethereum.Signer.EthECKey.GetPublicAddress (accountPrivateKey);
+            accountAddress = address;
+            Debug.Log("Imported account SUCCESS");
+        } catch (Exception e) {
+            Debug.Log ("error" + e);
+        }
+    }
+
+    public void conversation () {
+        StartCoroutine(conversationRequest(userAddress, Nethereum.Util.UnitConversion.Convert.ToWei(2010)));
+    }
+
+    public void checkTransferEvent () {
+        StartCoroutine (getTransferEventRequest ());
+    }
+
+    public void checkOrderEvent () {
+        StartCoroutine (getOrderEventRequest ());
+    }
+
+    public void sendDrinkOrder () {
+        StartCoroutine(drinkOrderRequest(baristaAddress, Nethereum.Util.UnitConversion.Convert.ToWei(2010)));
+    }
+        
+
+    // we are going to use this function, to call the CheckTransactionReceiptIsMined() function
+    // we created in the pingTokenService class, this will trigger every 10 seconds until
+    // the transaction hash we sent is mined, throws an error or tries 999 times (just for testing)
+    public void checkTx(string txHash, Action<bool> callback) {
+        StartCoroutine(conversationContract.CheckTransactionReceiptIsMined(
+            _url,
+            txHash,
+            (cb) => {
+                Debug.Log("The transaction has been mined succesfully");
+                // we send a callback to the function, here you can add some more logic if you wish
+                callback(true);
+            }
+        ));
+    }
+
+    // here we define all the IEnumerator functions for the requests
+    // Basically, the requests needs two things
+    // First, a request, EthCallUnityRequest for calls,
+    // EthGetLogsUnityRequest for events, and TransactionSignedUnityRequest for transactions), 
+    // Second, an input, we created it in the ContractService for each case.
+    // After that, we just yield return the request, sending the input and
+    // the block you want to check (depending on what we are doing)
+
+    public IEnumerator getTransferEventRequest() {
+        var getTransferRequest = new EthGetLogsUnityRequest (_url);
+        var getTransferInput = conversationContract.CreateTransferInput ();
+        Debug.Log ("Checking transfer event...");
+        yield return getTransferRequest.SendRequest (getTransferInput);
+        if (getTransferRequest.Exception == null) {
+            Debug.Log ("Transfer Event: " + getTransferRequest.Result);
+        } else {
+            Debug.Log ("Error getting transfer event: " + getTransferRequest.Exception.Message);
+        }
+    }
+
+    public IEnumerator getOrderEventRequest() {
+        var getOrderRequest = new EthGetLogsUnityRequest (_url);
+        var getOrderInput = conversationContract.CreateOrderInput ();
+        Debug.Log ("Checking order event...");
+        yield return getOrderRequest.SendRequest (getOrderInput);
+        if (getOrderRequest.Exception == null) {
+            Debug.Log ("Order Event: " + getOrderRequest.Result);
+        } else {
+            Debug.Log ("Error getting order event: " + getOrderRequest.Exception.Message);
+        }
+    }
+
+    public IEnumerator conversationRequest (string address, BigInteger value) {
+        var transactionInput = conversationContract.CreateConversationInput(
+            accountAddress, address, value,
+            new HexBigInteger(200000), new HexBigInteger(190), new HexBigInteger(2)
+        );
+        Debug.Log("Transfering tokens for conversation to: " + address);
+        var transactionSignedRequest = new TransactionSignedUnityRequest(_url, accountPrivateKey, accountAddress);
+        yield return transactionSignedRequest.SignAndSendTransaction(transactionInput);
+        if (transactionSignedRequest.Exception == null) {
+            Debug.Log("Transfered tx created for conversation: " + transactionSignedRequest.Result);
+            // Now we check the transaction until it's mined in the blockchain as we did in
+            // the pingRequest, when the callback is triggered (transaction mined),
+            // we execute the getBalanceRequest for the address we send tokens to
+            checkTx(transactionSignedRequest.Result, (cb) => {
+                //StartCoroutine(getBalanceOfRequest(address));
+            });
+        } else {
+            Debug.Log("Error transfering tokens for conversation: " + transactionSignedRequest.Exception.Message);
+        }
+    }
+
+    public IEnumerator drinkOrderRequest (string address, BigInteger value) {
+        var transactionInput = conversationContract.CreateDrinkOrderInput(
+            accountAddress, address, value,
+            new HexBigInteger(200000), new HexBigInteger(190), new HexBigInteger(0)
+        );
+        Debug.Log("Transfering tokens for drink to: " + address);
+        var transactionSignedRequest = new TransactionSignedUnityRequest(_url, accountPrivateKey, accountAddress);
+        yield return transactionSignedRequest.SignAndSendTransaction(transactionInput);
+        if (transactionSignedRequest.Exception == null) {
+            Debug.Log("Transfered tx created for drink: " + transactionSignedRequest.Result);
+            // Now we check the transaction until it's mined in the blockchain as we did in
+            // the pingRequest, when the callback is triggered (transaction mined),
+            // we execute the getBalanceRequest for the address we send tokens to
+            checkTx(transactionSignedRequest.Result, (cb) => {
+                //StartCoroutine(getBalanceOfRequest(address));
+            });
+        } else {
+            Debug.Log("Error transfering tokens for drink: " + transactionSignedRequest.Exception.Message);
+        }
+    }
+
+    public void deployEthereumContract() {
+        print ("Deploying contract...");
+        // Here we have our ABI & bytecode required for both creating and accessing our contract.
+        var abi = @"[{
+        ""constant"": false,
+        ""inputs"": [],
+        ""name"": ""conversation"",
+        ""outputs"": [],
+        ""payable"": true,
+        ""stateMutability"": ""payable"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""user"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""organizer"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""name"": ""balanceOf"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""uint256""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": false,
+        ""inputs"": [],
+        ""name"": ""drinkOrder"",
+        ""outputs"": [],
+        ""payable"": true,
+        ""stateMutability"": ""payable"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""amount"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""uint256""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""constant"": true,
+        ""inputs"": [],
+        ""name"": ""barista"",
+        ""outputs"": [
+            {
+                ""name"": """",
+                ""type"": ""address""
+            }
+        ],
+        ""payable"": false,
+        ""stateMutability"": ""view"",
+        ""type"": ""function""
+    },
+    {
+        ""inputs"": [],
+        ""payable"": false,
+        ""stateMutability"": ""nonpayable"",
+        ""type"": ""constructor""
+    },
+    {
+        ""anonymous"": false,
+        ""inputs"": [
+            {
+                ""indexed"": true,
+                ""name"": ""from"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": true,
+                ""name"": ""to"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": false,
+                ""name"": ""amount"",
+                ""type"": ""uint256""
+            }
+        ],
+        ""name"": ""Transfer"",
+        ""type"": ""event""
+    },
+    {
+        ""anonymous"": false,
+        ""inputs"": [
+            {
+                ""indexed"": true,
+                ""name"": ""from"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": true,
+                ""name"": ""to"",
+                ""type"": ""address""
+            },
+            {
+                ""indexed"": false,
+                ""name"": ""amount"",
+                ""type"": ""uint256""
+            }
+        ],
+        ""name"": ""Order"",
+        ""type"": ""event""
+    }]";
+
+        var byteCode = @"608060405234801561001057600080fd5b5060008054600160a060020a031990811633179091556002600481905560018054831673d62d6608bb035b618704f4a8c4fe74429a8f188f179055805490911673fbe095abe7b2dc445c852f22f1b6ccc7dbbe2ae517905561032d806100776000396000f3006080604052600436106100825763ffffffff7c010000000000000000000000000000000000000000000000000000000060003504166317d4355a81146100875780634f8632ba1461009157806361203265146100c257806370a08231146100d7578063a07fde501461010a578063aa8c217c14610112578063b26f95b014610127575b600080fd5b61008f61013c565b005b34801561009d57600080fd5b506100a66101e7565b60408051600160a060020a039092168252519081900360200190f35b3480156100ce57600080fd5b506100a66101f6565b3480156100e357600080fd5b506100f8600160a060020a0360043516610205565b60408051918252519081900360200190f35b61008f610217565b34801561011e57600080fd5b506100f86102ec565b34801561013357600080fd5b506100a66102f2565b600054600160a060020a03163314610153576101e5565b6004805460018054600160a060020a0390811660009081526003602052604080822080549095019094559154935492519316929081818185875af192505050151561019d57600080fd5b6001546004546040805191825251600160a060020a039092169133917fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef919081900360200190a35b565b600154600160a060020a031681565b600054600160a060020a031681565b60036020526000908152604090205481565b600454600154600160a060020a03166000908152600360205260409020541015610240576101e5565b6004805460018054600160a060020a03908116600090815260036020526040808220805495909503909455845460025483168252848220805490910190559154935492519316929081818185875af192505050151561029e57600080fd5b6002546001546004546040805191825251600160a060020a039384169392909216917f26ca2cf85d88f837ff277765a9779d751b6296a239e2081b571be4e6f0d7446f9181900360200190a3565b60045481565b600254600160a060020a0316815600a165627a7a723058206c65fa270e099fab2d31b5b9a9e535dca40e0596f7a0a6df3e63c94e6cbc5ee00029";
+
+        StartCoroutine(deployContract(abi, byteCode, accountAddress, (result) => {
+            print("Result " + result);
+        }));
+
+    }
+    public IEnumerator deployContract (string abi, string byteCode, string senderAddress, System.Action<string> callback) {
+        //Amount of gas required to create the contract
+        var gas = new HexBigInteger(900000);
+
+        //First we build the transaction
+        var transactionInput = contractTransactionBuilder.BuildTransaction(abi, byteCode, senderAddress, gas, null);
+
+        // Here we create a new signed transaction Unity Request with the url, the private and public key
+        // (this will sign the transaction automatically)
+        var transactionSignedRequest = new TransactionSignedUnityRequest(_url, accountPrivateKey, accountAddress);
+
+        // Then we send the request and wait for the transaction hash
+        Debug.Log("Sending Deploy contract transaction...");
+        yield return transactionSignedRequest.SignAndSendTransaction(transactionInput);
+        if (transactionSignedRequest.Exception == null)
+        {
+            // If we don't have exceptions we just return the result!
+            callback(transactionSignedRequest.Result);
+        }
+        else
+        {
+            // if we had an error in the UnityRequest we just display the Exception error
+            throw new System.InvalidOperationException("Deploy contract tx failed:" + transactionSignedRequest.Exception.Message);
+        }
+
+    }
+
+}
+
+
