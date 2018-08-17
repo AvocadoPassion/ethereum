@@ -21,3 +21,4 @@ For our final application we used Unity 2018.2.2f1 and the Holographic Remoting 
 Our Scene folder stores the menu scene.
 
 
+(ConversationContract, MyToken, and Smart Contract were the codes we were working on until we had to completley restructure our smart contracts as even though the contract was being funded no money was ever being transferred.)
