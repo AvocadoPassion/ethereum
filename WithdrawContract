@@ -1,0 +1,44 @@
+pragma solidity ^0.4.24;
+
+contract WithdrawContract {
+
+mapping (address => uint256) public balanceOf;
+
+event LogDeposit(address owner, uint amount);
+event LogWithdraw(address receiver, uint amount);
+event LogTransfer(address owner, address to, uint amount);
+
+uint256 amount = 30;
+
+function deposit() public payable returns(bool success) {
+    require(msg.value == amount);
+    balanceOf[msg.sender] += msg.value;
+    emit LogDeposit(msg.sender, msg.value);
+    return true;
+}
+
+function getBalance() public view returns (uint256){
+    return address(this).balance;
+}
+
+uint256 value = 5;
+
+function withdraw() public returns(bool success) {
+    require(balanceOf[msg.sender] >= value);
+    balanceOf[msg.sender] -= value;
+    msg.sender.transfer(value);
+    emit LogWithdraw(msg.sender, value);
+    return true;
+}
+
+uint256 otherValue = 10;
+
+function transfer() public returns(bool success) {
+    require(balanceOf[msg.sender] >= otherValue);
+    address to = 0x55eb5f673365C64200A6f1BaB8257DEda6775DfD;
+    balanceOf[msg.sender] -= otherValue;
+    to.transfer(otherValue);
+    emit LogTransfer(msg.sender, to, otherValue);
+    return true;
+}
+}
